@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Lopatcong U10 - Game Tracker</title>
+<title>Lopatcong U10 - Game Tracker V3</title>
 <style>
   :root {
     --navy: #002855;
@@ -192,13 +192,13 @@
   }
   .field .line { position: absolute; background: rgba(255,255,255,0.85); }
   .halfway { left: 0; right: 0; top: 50%; height: 2px; }
-  .center-circle {
+  .field .line.center-circle {
     left: 50%; top: 50%; width: 22%; padding-bottom: 22%;
     border: 2px solid rgba(255,255,255,0.85); border-radius: 50%;
     background: none; transform: translate(-50%, -50%);
   }
-  .box-top { left: 22%; top: 0; width: 56%; height: 14%; border: 2px solid rgba(255,255,255,0.85); border-top: none; background: none; }
-  .box-bottom { left: 22%; bottom: 0; width: 56%; height: 14%; border: 2px solid rgba(255,255,255,0.85); border-bottom: none; background: none; }
+  .field .line.box-top { left: 22%; top: 0; width: 56%; height: 14%; border: 2px solid rgba(255,255,255,0.85); border-top: none; background: none; }
+  .field .line.box-bottom { left: 22%; bottom: 0; width: 56%; height: 14%; border: 2px solid rgba(255,255,255,0.85); border-bottom: none; background: none; }
 
   .slot {
     position: absolute; width: 62px; height: 62px; transform: translate(-50%, -50%);
@@ -220,8 +220,18 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
   }
   .chip.on-field { border-color: var(--yellow-dark); }
-  .chip .initials { font-weight: 800; font-size: 15px; color: var(--navy); line-height: 1; }
+  .chip .initials {
+    font-weight: 800; font-size: 9px; color: var(--navy); line-height: 1.1;
+    max-width: 50px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center;
+  }
   .chip .shift-clock { font-size: 8px; font-weight: 700; color: var(--blue); margin-top: 1px; }
+  .field-name-label {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: white; background: rgba(0,0,0,0.55);
+    padding: 1px 5px; border-radius: 6px; margin-bottom: 2px;
+    font-weight: 700; white-space: nowrap; z-index: 1;
+  }
   .drag-ghost { position: fixed; z-index: 999; pointer-events: none; opacity: 0.9; transform: translate(-50%, -50%) scale(1.08); }
 
   /* Bench */
@@ -292,12 +302,79 @@
   .game-detail { padding: 0 12px 12px; }
   .game-detail h4 { margin: 8px 0 4px; font-size: 12px; color: var(--navy); }
   .game-detail .goal-row { background: #f3f6fa; color: var(--navy); }
+
+  /* Custom confirm modal (native confirm() is blocked in iOS home-screen apps) */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white;
+    border-radius: 14px;
+    padding: 20px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+  }
+  .modal-box p { color: var(--navy); font-size: 14px; margin: 0 0 16px; line-height: 1.4; }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-btns button { flex: 1; border: none; border-radius: 8px; padding: 11px; font-weight: 700; font-size: 14px; }
+  .modal-cancel { background: #eee; color: var(--navy); }
+  .modal-confirm { background: #c0392b; color: white; }
+
+  .attendance-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 4px;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .attendance-row .pname { font-size: 14px; color: var(--navy); font-weight: 600; }
+  .attendance-row.absent .pname { color: #999; text-decoration: line-through; }
+  .toggle-switch {
+    width: 46px; height: 26px; border-radius: 20px;
+    background: #ccc; position: relative; border: none; flex-shrink: 0;
+  }
+  .toggle-switch.on { background: #2ecc71; }
+  .toggle-switch .knob {
+    position: absolute; top: 2px; left: 2px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: white; transition: left 0.15s;
+  }
+  .toggle-switch.on .knob { left: 22px; }
 </style>
 </head>
 <body>
 
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <p id="confirmModalText"></p>
+    <div class="modal-btns">
+      <button class="modal-cancel" id="confirmModalCancelBtn" onclick="hideConfirmModal()">Cancel</button>
+      <button class="modal-confirm" id="confirmModalYes">Finalize</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="attendanceModal">
+  <div class="modal-box" style="max-width:340px;">
+    <p style="margin-bottom:8px;">Who's here today?</p>
+    <div id="attendanceList" style="text-align:left; max-height:50vh; overflow-y:auto; margin-bottom:12px;"></div>
+    <div class="modal-btns">
+      <button class="modal-confirm" style="background:var(--blue);" onclick="closeAttendanceModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="header">
-  <h1>⚽ Lopatcong U10 Game Tracker</h1>
+  <h1>⚽ Lopatcong U10 Game Tracker V3</h1>
   <p>Drag players on/off the field · log goals · finalize for a full report</p>
 </div>
 
@@ -313,6 +390,8 @@
     <span class="score-vs">vs</span>
     <input id="opponentInput" value="Opponent" />
   </div>
+
+  <button class="opp-goal-btn" style="margin-bottom:8px;" onclick="openAttendanceModal()">👥 Attendance: <span id="attendanceCount">16/16</span> here today</button>
 
   <div class="scoreboard" id="scoreboard">0 - 0
     <span class="half-tag" id="halfTag">Half 1</span>
@@ -371,7 +450,6 @@
   <div id="gamesList"></div>
 </div>
 
-<script>
 <script type="module">
   // ============================================================
   // FIREBASE SETUP — paste your config from the Firebase console
@@ -381,12 +459,12 @@
   import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
-    apiKey: "PASTE_YOUR_API_KEY",
-    authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-    projectId: "PASTE_YOUR_PROJECT_ID",
-    storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-    messagingSenderId: "PASTE_YOUR_SENDER_ID",
-    appId: "PASTE_YOUR_APP_ID"
+    apiKey: "AIzaSyA0SMKcnlQZ8M8oEeGn2ILGbrv11_fca5k",
+    authDomain: "lopatsocceru10.firebaseapp.com",
+    projectId: "lopatsocceru10",
+    storageBucket: "lopatsocceru10.firebasestorage.app",
+    messagingSenderId: "411061837181",
+    appId: "1:411061837181:web:ecbc2a7ac4d6d8f74e4014"
   };
   // ============================================================
   // END CONFIG — nothing below this line needs to be edited
@@ -427,23 +505,17 @@ const slots = [
 ];
 
 function mkPlayer(name) {
-  return { id: Math.random().toString(36).slice(2), name, slotId: null, sessionStart: null, half1Sec: 0, half2Sec: 0 };
+  return { id: Math.random().toString(36).slice(2), name, slotId: null, sessionStart: null, half1Sec: 0, half2Sec: 0, present: true };
 }
 
 let players = [
   mkPlayer("Bella"), mkPlayer("Mila"), mkPlayer("Ishmon"),
   mkPlayer("Logan"), mkPlayer("Elliot F"), mkPlayer("Jo"),
   mkPlayer("Jordon"), mkPlayer("Austin"), mkPlayer("Parker"),
-  mkPlayer("Riann"), mkPlayer("Riley"), mkPlayer("Elliott"),
+  mkPlayer("Riann"), mkPlayer("Riley"), mkPlayer("Elliot C"),
   mkPlayer("Everly"), mkPlayer("Charlie"), mkPlayer("Rayon"),
   mkPlayer("Jaxson")
 ];
-
-function initials(name) {
-  const parts = name.trim().split(' ');
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return parts.map(w => w[0]).join('').slice(0, 2).toUpperCase();
-}
 
 /* ---------- Game / half state ---------- */
 let half = 1;
@@ -568,7 +640,7 @@ function moveOff(player) { flushSession(player); player.slotId = null; }
 function populateGoalSelects() {
   const scorerSel = document.getElementById('scorerSelect');
   const assistSel = document.getElementById('assistSelect');
-  const sorted = players.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = players.filter(p => p.present).sort((a, b) => a.name.localeCompare(b.name));
   scorerSel.innerHTML = sorted.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   assistSel.innerHTML = `<option value="">No assist</option>` + sorted.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
@@ -591,6 +663,7 @@ function render() {
   document.getElementById('halfTag').textContent = 'Half ' + half;
   document.getElementById('half2Btn').disabled = half !== 1;
   document.getElementById('half2Btn').style.opacity = half !== 1 ? 0.4 : 1;
+  document.getElementById('attendanceCount').textContent = players.filter(p => p.present).length + '/' + players.length;
 
   const ourGoals = goals.filter(g => g.team === 'us').length;
   const oppGoals = goals.filter(g => g.team === 'opp').length;
@@ -614,7 +687,14 @@ function render() {
     slotEl.style.left = slot.x + '%';
     slotEl.style.top = slot.y + '%';
     const occ = playerInSlot(slot.id);
-    if (occ) { slotEl.classList.add('filled'); slotEl.appendChild(buildChip(occ, true)); }
+    if (occ) {
+      slotEl.classList.add('filled');
+      slotEl.appendChild(buildChip(occ, true));
+      const label = document.createElement('div');
+      label.className = 'field-name-label';
+      label.textContent = occ.name;
+      slotEl.appendChild(label);
+    }
     else slotEl.textContent = slot.label;
     field.appendChild(slotEl);
   });
@@ -622,9 +702,9 @@ function render() {
   // bench
   const bench = document.getElementById('bench');
   bench.innerHTML = '';
-  const benchPlayers = players.filter(p => !p.slotId).sort((a, b) => liveTotal(a) - liveTotal(b));
-  const totals = players.map(liveTotal);
-  const minTotal = Math.min(...totals);
+  const benchPlayers = players.filter(p => !p.slotId && p.present).sort((a, b) => liveTotal(a) - liveTotal(b));
+  const totals = players.filter(p => p.present).map(liveTotal);
+  const minTotal = totals.length ? Math.min(...totals) : 0;
   benchPlayers.forEach(p => {
     const wrap = document.createElement('div');
     wrap.className = 'bench-chip-wrap' + (liveTotal(p) === minTotal ? ' needs-time' : '');
@@ -641,14 +721,56 @@ function render() {
   });
 
   renderSummary();
-  populateGoalSelects();
+  saveLiveState();
+}
+
+function saveLiveState() {
+  try {
+    const data = {
+      teamName: document.getElementById('teamNameInput').value,
+      opponentName: document.getElementById('opponentInput').value,
+      halfLengthMin: parseFloat(document.getElementById('minsInput').value) || 25,
+      half, gameRunning, gameRemainingSec, halfEndAt, goals,
+      players: players.map(p => ({ id: p.id, name: p.name, slotId: p.slotId, sessionStart: p.sessionStart, half1Sec: p.half1Sec, half2Sec: p.half2Sec, present: p.present }))
+    };
+    localStorage.setItem('lopatcong-live-game', JSON.stringify(data));
+  } catch (e) { /* storage unavailable — live state just won't survive a refresh */ }
+}
+
+function loadLiveState() {
+  try {
+    const raw = localStorage.getItem('lopatcong-live-game');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data.players || data.players.length === 0) return;
+
+    document.getElementById('teamNameInput').value = data.teamName || 'Lopatcong';
+    document.getElementById('opponentInput').value = data.opponentName || 'Opponent';
+    document.getElementById('minsInput').value = data.halfLengthMin || 25;
+    half = data.half || 1;
+    goals = data.goals || [];
+    players = data.players.map(p => ({ ...p, present: p.present !== false }));
+
+    if (data.gameRunning && data.halfEndAt) {
+      halfEndAt = data.halfEndAt;
+      gameRemainingSec = Math.max(0, Math.round((halfEndAt - Date.now()) / 1000));
+      gameRunning = true;
+      document.getElementById('minsInput').disabled = true;
+      gameIntervalId = setInterval(tick, 1000);
+      requestWakeLock();
+    } else {
+      gameRunning = false;
+      halfEndAt = null;
+      gameRemainingSec = data.gameRemainingSec != null ? data.gameRemainingSec : getHalfLengthSec();
+    }
+  } catch (e) { /* corrupted or missing saved state — start fresh */ }
 }
 
 function buildChip(player, onField) {
   const chip = document.createElement('div');
   chip.className = 'chip' + (onField ? ' on-field' : '');
   chip.dataset.playerId = player.id;
-  chip.innerHTML = `<div class="initials">${initials(player.name)}</div>` + (onField ? `<div class="shift-clock">${fmtMin(liveTotal(player))}</div>` : '');
+  chip.innerHTML = `<div class="initials">${player.name}</div>` + (onField ? `<div class="shift-clock">${fmtMin(liveTotal(player))}</div>` : '');
   attachDrag(chip, player);
   return chip;
 }
@@ -656,7 +778,8 @@ function buildChip(player, onField) {
 function renderSummary() {
   const list = document.getElementById('summaryList');
   list.innerHTML = '';
-  const sorted = players.slice().sort((a, b) => liveTotal(b) - liveTotal(a));
+  const sorted = players.filter(p => p.present).sort((a, b) => liveTotal(b) - liveTotal(a));
+  if (sorted.length === 0) { list.innerHTML = '<div class="summary-row">No players marked present.</div>'; return; }
   const totals = sorted.map(liveTotal);
   const maxT = Math.max(...totals), minT = Math.min(...totals);
   sorted.forEach(p => {
@@ -744,12 +867,13 @@ function switchTab(tab) {
 function buildReport() {
   const ourGoals = goals.filter(g => g.team === 'us').length;
   const oppGoals = goals.filter(g => g.team === 'opp').length;
-  const playerRows = players.map(p => ({
+  const playerRows = players.filter(p => p.present).map(p => ({
     name: p.name,
     half1Min: +(p.half1Sec / 60).toFixed(1),
     half2Min: +(p.half2Sec / 60).toFixed(1),
     totalMin: +((p.half1Sec + p.half2Sec) / 60).toFixed(1)
   })).sort((a, b) => b.totalMin - a.totalMin);
+  const absentPlayers = players.filter(p => !p.present).map(p => p.name);
   const totals = playerRows.map(r => r.totalMin);
   return {
     id: Date.now().toString(36),
@@ -761,9 +885,10 @@ function buildReport() {
     halfLengthMin: parseFloat(document.getElementById('minsInput').value) || 25,
     goals: goals.map(g => ({ ...g })),
     players: playerRows,
-    minMin: Math.min(...totals),
-    maxMin: Math.max(...totals),
-    spreadMin: +(Math.max(...totals) - Math.min(...totals)).toFixed(1)
+    absentPlayers,
+    minMin: totals.length ? Math.min(...totals) : 0,
+    maxMin: totals.length ? Math.max(...totals) : 0,
+    spreadMin: totals.length ? +(Math.max(...totals) - Math.min(...totals)).toFixed(1) : 0
   };
 }
 
@@ -785,36 +910,95 @@ function resetForNewGame() {
   clearInterval(gameIntervalId);
   gameRemainingSec = getHalfLengthSec();
   goals = [];
-  players.forEach(p => { p.slotId = null; p.sessionStart = null; p.half1Sec = 0; p.half2Sec = 0; });
+  players.forEach(p => { p.slotId = null; p.sessionStart = null; p.half1Sec = 0; p.half2Sec = 0; p.present = true; });
   document.getElementById('minsInput').disabled = false;
 }
 
-async function finalizeGame() {
-  if (!confirm('Finalize this game? This saves the report to Game History and clears the board for a new game.')) return;
-  gameRunning = false;
-  clearInterval(gameIntervalId);
-  halfEndAt = null;
-  flushAllSessions();
-  releaseWakeLock();
-  const report = buildReport();
+function showModal(message, options) {
+  options = options || {};
+  const showCancel = options.showCancel !== false;
+  document.getElementById('confirmModalText').textContent = message;
+  document.getElementById('confirmModalCancelBtn').style.display = showCancel ? 'block' : 'none';
+  document.getElementById('confirmModal').classList.add('open');
+  const yesBtn = document.getElementById('confirmModalYes');
+  yesBtn.textContent = options.confirmText || 'OK';
+  const newYesBtn = yesBtn.cloneNode(true); // strip old listeners
+  yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+  newYesBtn.addEventListener('click', () => {
+    hideConfirmModal();
+    if (options.onConfirm) options.onConfirm();
+  });
+}
+function hideConfirmModal() {
+  document.getElementById('confirmModal').classList.remove('open');
+}
 
-  let savedToCloud = false;
-  if (window.__firebaseSaveGame) {
-    try {
-      await window.__firebaseSaveGame(report);
-      savedToCloud = true; // real-time listener will add it to savedGames automatically
-    } catch (e) {
-      console.warn('Could not save to Firebase, saving locally instead.', e);
-    }
-  }
-  if (!savedToCloud) {
-    savedGames.unshift(report);
-    saveGamesToStorage();
-  }
-
-  resetForNewGame();
+/* ---------- Attendance ---------- */
+function openAttendanceModal() {
+  renderAttendanceList();
+  document.getElementById('attendanceModal').classList.add('open');
+}
+function closeAttendanceModal() {
+  document.getElementById('attendanceModal').classList.remove('open');
+}
+function togglePresent(id) {
+  const p = players.find(pl => pl.id === id);
+  if (!p) return;
+  p.present = !p.present;
+  if (!p.present && p.slotId) moveOff(p); // pull them off the field if marked absent
+  renderAttendanceList();
+  populateGoalSelects(); // absent players shouldn't be scorer/assist options
   render();
-  switchTab('games');
+}
+function renderAttendanceList() {
+  const list = document.getElementById('attendanceList');
+  const sorted = players.slice().sort((a, b) => a.name.localeCompare(b.name));
+  list.innerHTML = sorted.map(p => `
+    <div class="attendance-row${p.present ? '' : ' absent'}">
+      <span class="pname">${p.name}</span>
+      <button class="toggle-switch${p.present ? ' on' : ''}" onclick="togglePresent('${p.id}')"><span class="knob"></span></button>
+    </div>`).join('');
+  const presentCount = players.filter(p => p.present).length;
+  document.getElementById('attendanceCount').textContent = presentCount + '/' + players.length;
+}
+
+function finalizeGame() {
+  showModal('Finalize this game? This saves the report to Game History and clears the board for a new game.', { confirmText: 'Finalize', showCancel: true, onConfirm: doFinalizeGame });
+}
+
+async function doFinalizeGame() {
+
+  try {
+    gameRunning = false;
+    clearInterval(gameIntervalId);
+    halfEndAt = null;
+    flushAllSessions();
+    releaseWakeLock();
+    const report = buildReport();
+
+    let savedToCloud = false;
+    if (window.__firebaseSaveGame) {
+      try {
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase save timed out')), 6000));
+        await Promise.race([window.__firebaseSaveGame(report), timeout]);
+        savedToCloud = true; // real-time listener will add it to savedGames automatically
+      } catch (e) {
+        console.warn('Could not save to Firebase (or it timed out), saving locally instead.', e);
+      }
+    }
+    if (!savedToCloud) {
+      savedGames.unshift(report);
+      saveGamesToStorage();
+    }
+
+    resetForNewGame();
+    populateGoalSelects();
+    render();
+    switchTab('games');
+  } catch (e) {
+    console.error('Finalize game failed:', e);
+    showModal('Something went wrong finalizing the game: ' + e.message + ' Your current game data is still intact — nothing was lost. Please try again or screenshot this message.', { showCancel: false });
+  }
 }
 
 function gameCardHtml(g) {
@@ -826,6 +1010,9 @@ function gameCardHtml(g) {
       <span class="sname">${p.name}</span>
       <span class="stotal">${p.totalMin}m (H1 ${p.half1Min}, H2 ${p.half2Min})</span>
     </div>`).join('');
+  const absentHtml = (g.absentPlayers && g.absentPlayers.length)
+    ? `<h4>Absent</h4><div class="summary-row">${g.absentPlayers.join(', ')}</div>`
+    : '';
   return `
   <details class="game-card">
     <summary>${g.date} — ${g.teamName} ${g.ourGoals}-${g.oppGoals} ${g.opponentName} <span class="spread-badge">spread ${g.spreadMin}m</span></summary>
@@ -834,12 +1021,13 @@ function gameCardHtml(g) {
       ${goalsHtml}
       <h4>Playing Time (${g.halfLengthMin} min halves)</h4>
       ${playersHtml}
+      ${absentHtml}
     </div>
   </details>`;
 }
 
 function exportGamesCsv() {
-  if (savedGames.length === 0) { alert('No finalized games to export yet.'); return; }
+  if (savedGames.length === 0) { showModal('No finalized games to export yet.', { showCancel: false }); return; }
   const rows = [['Date', 'Team', 'Opponent', 'Our Goals', 'Opp Goals', 'Half Length (min)', 'Player', 'Half 1 Min', 'Half 2 Min', 'Total Min']];
   savedGames.forEach(g => {
     g.players.forEach(p => {
@@ -868,8 +1056,14 @@ function renderGamesList() {
 }
 
 /* ---------- Init ---------- */
+document.getElementById('teamNameInput').addEventListener('input', saveLiveState);
+document.getElementById('opponentInput').addEventListener('input', saveLiveState);
+document.getElementById('minsInput').addEventListener('input', saveLiveState);
+
 (async function init() {
   await loadGamesFromStorage();
+  loadLiveState();
+  populateGoalSelects();
   render();
 })();
 </script>
