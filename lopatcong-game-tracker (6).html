@@ -1388,6 +1388,7 @@ function confirmUploadedGame(id) {
   const game = savedGames.find(g => g.id === id);
   if (!game) return;
   game._syncState = 'confirmed';
+  if (!savedGames.some(g => g._syncState === 'pending' || g._syncState === 'legacy')) cloudError = '';
   try { saveGamesToStorage(); } catch (e) { /* A cloud acknowledgment does not guarantee local storage succeeded. */ }
   refreshHistory();
 }
@@ -1677,7 +1678,7 @@ function gameCardHtml(g) {
   <details class="game-card">
     <summary>${esc(g.date)} — ${esc(g.teamName)} ${g.ourGoals}-${g.oppGoals} ${esc(g.opponentName)} <span class="spread-badge">spread ${g.spreadMin}m</span></summary>
     <div class="game-detail">
-      <p>${g._syncState === 'confirmed' ? 'Confirmed in cloud' : g._syncState === 'unconfirmed' ? 'Cached locally · awaiting cloud confirmation' : 'Saved locally · upload pending'}</p>
+      <p>${g._syncState === 'confirmed' ? 'Confirmed in cloud' : g._syncState === 'unconfirmed' ? (historyError ? 'Available in this page · awaiting cloud confirmation' : 'Cached locally · awaiting cloud confirmation') : 'Saved locally · upload pending'}</p>
       <h4>Goals</h4>
       ${goalsHtml}
       <h4>Playing Time (${g.halfLengthMin} min halves · goal ${tgt} min)</h4>

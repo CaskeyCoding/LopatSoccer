@@ -472,7 +472,7 @@ test('SAVE-1: a failed live reset after history commit cannot duplicate the repo
   assert.notEqual(recovered.newId, committed.id);
 });
 
-test('SAVE-3: timeout retains the pending report and a late SDK acknowledgement can confirm it', async t => {
+test('SAVE-3 and SAVE-4: timeout retains the pending report and a late SDK acknowledgement clears stale failure status', async t => {
   const page = await fresh(t, { sdk: true });
   await page.evaluate(async () => { window.__sdk.hold = true; logOurGoal(); await doFinalizeGame(); });
   assert.equal(await page.evaluate(() => typeof syncPendingGames), 'function');
@@ -488,6 +488,35 @@ test('SAVE-3: timeout retains the pending report and a late SDK acknowledgement 
   assert.match(timedOut.status, /timed out|timeout/i);
   await page.evaluate(() => window.__sdk.resolves.forEach(resolve => resolve()));
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('lopatcong-games'))[0]._syncState === 'confirmed');
+  const confirmedStatus = await page.locator('#syncStatus').textContent();
+  assert.match(confirmedStatus, /confirmed in cloud/i);
+  assert.doesNotMatch(confirmedStatus, /failed|failure|timed out|timeout|upload pending/i, 'a late acknowledgement must clear stale upload failure notices when every report is confirmed');
   await page.evaluate(() => syncPendingGames());
   assert.equal(await page.evaluate(() => window.__sdk.calls.length), 1, 'a confirmed late acknowledgement must prevent another upload');
+});
+
+test('SAVE-4: an uncached cloud report stays visible without claiming local persistence', async t => {
+  const page = await fresh(t);
+  const actual = await page.evaluate(() => {
+    const report = buildReport(); report.id = 'synthetic-uncached-cloud';
+    const original = Storage.prototype.setItem;
+    let injected = 0;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'lopatcong-games') {
+        injected++;
+        throw new DOMException('Synthetic cloud-cache write failure', 'QuotaExceededError');
+      }
+      return original.call(this, key, value);
+    };
+    try { window.__onGamesUpdate([report], { confirmed: false }); } finally { Storage.prototype.setItem = original; }
+    switchTab('games');
+    return { injected, stored: localStorage.getItem('lopatcong-games'), visibleId: savedGames[0]?.id, cardStatus: document.querySelector('.game-card p')?.textContent, status: document.getElementById('syncStatus').textContent };
+  });
+  assert.ok(actual.injected > 0, 'the cloud-cache write failure must be exercised');
+  assert.equal(actual.stored, null, 'the report is visible in memory but was not persisted');
+  assert.equal(actual.visibleId, 'synthetic-uncached-cloud');
+  assert.equal(await page.locator('.game-card').count(), 1);
+  assert.match(actual.cardStatus, /awaiting cloud confirmation/i);
+  assert.doesNotMatch(actual.cardStatus, /cached|saved locally|saved on this device/i, 'a report whose storage write failed must not claim a local cache');
+  assert.match(actual.status, /not be saved|could not save|storage|recover/i);
 });
